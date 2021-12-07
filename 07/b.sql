@@ -4,19 +4,18 @@ CREATE TEMPORARY TABLE input(
 );
 \copy input(line) from pstdin
 
-EXPLAIN ANALYZE
 WITH nums(n) AS (
     SELECT s::int
     FROM input,
         LATERAL unnest(string_to_array(line, ',')) AS s
 ),
-extremes(minimum, maximum) AS (
-    SELECT min(n), max(n)
+mean(m) AS (
+    SELECT avg(n)
     FROM nums
 )
 SELECT sum(dist * (dist + 1) / 2) AS cost
-FROM nums, extremes,
-    LATERAL generate_series(minimum, maximum) AS target,
+FROM nums, mean,
+    LATERAL (VALUES (floor(m)::int), (ceil(m)::int)) AS t(target),
     LATERAL (VALUES (@(n - target))) AS let(dist)
 GROUP BY target
 ORDER BY cost
