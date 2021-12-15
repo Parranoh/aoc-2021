@@ -42,13 +42,11 @@ BEGIN
         FROM (VALUES (_x+1, _y, _d + _risks[_x+1][_y], FALSE),
             (_x-1, _y, _d + _risks[_x-1][_y], FALSE),
             (_x, _y+1, _d + _risks[_x][_y+1], FALSE),
-            (_x, _y-1, _d + _risks[_x][_y-1], FALSE)) AS new(x,y,d,done)
+            (_x, _y-1, _d + _risks[_x][_y-1], FALSE)) AS new(a,b,d,b)
         WHERE d IS NOT NULL
-        ON CONFLICT DO NOTHING;
-
-        UPDATE dist
+        ON CONFLICT (x, y) DO UPDATE
         SET d = least(dist.d, _d + _risks[dist.x][dist.y])
-        WHERE (x,y) IN ((_x+1, _y),
+        WHERE (dist.x,dist.y) IN ((_x+1, _y),
             (_x-1, _y),
             (_x, _y+1),
             (_x, _y-1));
@@ -59,11 +57,19 @@ LANGUAGE PLpgSQL
 VOLATILE;
 
 WITH
-lines(y, l) AS (
-    SELECT id, array_agg(c::int ORDER BY x)
+tile(x, y, v) AS (
+    SELECT x + tile_x * max(x) OVER (),
+        dense_rank() OVER (ORDER BY id) + tile_y * (SELECT count(*) FROM input),
+        (c::int - 1 + tile_x + tile_y) % 9 + 1
     FROM input,
-        LATERAL unnest(string_to_array(line, NULL)) WITH ORDINALITY AS _(c, x)
-    GROUP BY id
+        LATERAL unnest(string_to_array(line, NULL)) WITH ORDINALITY AS _(c, x),
+        LATERAL generate_series(0, 4) AS tile_x,
+        LATERAL generate_series(0, 4) AS tile_y
+),
+lines(y, l) AS (
+    SELECT y, array_agg(v ORDER BY x)
+    FROM tile
+    GROUP BY y
 ),
 risks(r) AS (
     SELECT array_agg(l ORDER BY y)
