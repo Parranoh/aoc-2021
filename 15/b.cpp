@@ -70,7 +70,7 @@ next:
 
 int main(void)
 {
-    std::vector<std::vector<int>> input;
+    std::vector<std::vector<char>> input;
     std::string line;
     while (std::getline(std::cin, line))
     {
@@ -79,7 +79,7 @@ int main(void)
             input.back().emplace_back(c - '0');
     }
 
-    std::vector<std::vector<int>> risk;
+    std::vector<std::vector<char>> risk;
     for (size_t i = 0; i < 5; ++i)
     {
         for (auto &l : input)
@@ -93,14 +93,14 @@ int main(void)
 
     const size_t start_x = 0, start_y = 0, end_x = risk.size() - 1, end_y = risk.front().size() - 1;
 
-    std::vector<std::vector<int>> dist(risk.size());
+    std::vector<std::vector<unsigned int>> dist(risk.size());
     for (auto &vec : dist)
-        vec.resize(risk.front().size(), INT_MAX);
+        vec.resize(risk.front().size(), UINT_MAX);
     std::vector<std::vector<bool>> visited(risk.size());
     for (auto &vec : visited)
         vec.resize(risk.front().size());
     dist[start_x][start_y] = 0;
-    pq_t<int, std::pair<size_t, size_t>> pq;
+    pq_t<unsigned int, std::pair<size_t, size_t>> pq;
     pq.insert(0, { start_x, start_y });
 
     while (!pq.empty())
