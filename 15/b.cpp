@@ -134,4 +134,5 @@ int main(void)
         }
     }
     std::cout << dist[end_x][end_y] << std::endl;
+    return 0;
 }
