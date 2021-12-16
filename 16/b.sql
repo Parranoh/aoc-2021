@@ -10,13 +10,20 @@ CREATE TYPE state_t AS ENUM (
 );
 
 DROP FUNCTION IF EXISTS bits_to_int(bit[]);
-CREATE FUNCTION bits_to_int(b bit[]) RETURNS bigint AS
+CREATE FUNCTION bits_to_int(b bit[]) RETURNS numeric AS
 $$
     SELECT sum(d::int * 2 ^ (array_length(b, 1) - p))
     FROM unnest(b) WITH ORDINALITY AS _(d, p)
 $$
 LANGUAGE SQL
 IMMUTABLE;
+
+DROP AGGREGATE IF EXISTS product(numeric);
+CREATE AGGREGATE product(numeric) (
+    sfunc = numeric_mul,
+    stype = numeric,
+    initcond = 1
+);
 
 WITH RECURSIVE
 bits(b) AS (
@@ -45,11 +52,11 @@ parse(i,
         ARRAY[]::int[] AS ids,
         ARRAY[]::int[] AS starts,
         ARRAY[]::int[] AS parents,
-        ARRAY[]::bigint[] AS versions,
-        ARRAY[]::bigint[] AS type_ids,
-        ARRAY[]::bigint[] AS vals,
-        ARRAY[]::bigint[] AS tbl,
-        ARRAY[]::bigint[] AS tpl,
+        ARRAY[]::numeric[] AS versions,
+        ARRAY[]::numeric[] AS type_ids,
+        ARRAY[]::numeric[] AS vals,
+        ARRAY[]::numeric[] AS tbl,
+        ARRAY[]::numeric[] AS tpl,
         ARRAY[]::int[] AS pr -- }}}
 UNION ALL
     SELECT * FROM (
@@ -125,6 +132,33 @@ result(ids, parents, versions, type_ids, value) AS (
     FROM parse
     ORDER BY i DESC
     LIMIT 1
-)
-SELECT sum(version)
-FROM result, LATERAL unnest(versions) AS version;
+),
+eval(i, id, parent, val) AS (
+    SELECT array_length(ids, 1) + 1, id, parent, val
+    FROM result, LATERAL unnest(ids, parents, value) WITH ORDINALITY AS _(id, parent, val, i)
+    WHERE val IS NOT NULL
+UNION ALL SELECT * FROM (
+    WITH eval(i, id, parent, val) AS (TABLE eval)
+    SELECT DISTINCT eval.i - 1, rec.id, rec.parent, rec.val FROM eval, (
+            TABLE eval
+        UNION
+            SELECT NULL, ids[i - 1], parents[i - 1],
+                CASE type_ids[i - 1]
+                    WHEN 0 THEN sum(val)
+                    WHEN 1 THEN product(val)
+                    WHEN 2 THEN min(val)
+                    WHEN 3 THEN max(val)
+                    WHEN 5 THEN CASE WHEN (array_agg(val ORDER BY id))[1] > (array_agg(val ORDER BY id))[2] THEN 1 ELSE 0 END
+                    WHEN 6 THEN CASE WHEN (array_agg(val ORDER BY id))[1] < (array_agg(val ORDER BY id))[2] THEN 1 ELSE 0 END
+                    WHEN 7 THEN CASE WHEN min(val) = max(val)                                               THEN 1 ELSE 0 END
+                    END::numeric
+            FROM result, eval
+            WHERE ids[i - 1] = parent
+            GROUP BY i, ids, parents, type_ids
+    ) AS rec
+    WHERE eval.i > 1
+) AS rec)
+SELECT val
+FROM eval
+ORDER BY id
+LIMIT 1;
