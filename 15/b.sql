@@ -13,17 +13,29 @@ DECLARE
     _d int;
     _target_x CONSTANT int := array_length(_risks, 1);
     _target_y CONSTANT int := array_length(_risks, 2);
+    _done bool[][] := (
+        WITH
+        lines(y, l) AS (
+            SELECT y, array_agg(FALSE)
+            FROM generate_series(1, _target_y) AS y,
+                generate_series(1, _target_x) AS x
+            GROUP BY y
+        )
+        SELECT array_agg(l)
+    FROM lines
+    );
 BEGIN
-    CREATE TEMPORARY TABLE dist(x int, y int, d int, done bool, PRIMARY KEY (x,y));
-    INSERT INTO dist
-    VALUES (1, 1, 0, FALSE);
+    CREATE TEMPORARY TABLE pq(x int, y int, d int, PRIMARY KEY (x,y));
+    CREATE INDEX ON pq(d) INCLUDE (x, y);
+    INSERT INTO pq
+    VALUES (1, 1, 0);
 
     LOOP
         SELECT x, y, d
         INTO _x, _y, _d
-        FROM dist
-        WHERE NOT done
-        ORDER BY d;
+        FROM pq
+        ORDER BY d
+        LIMIT 1;
 
         IF NOT FOUND THEN
             RAISE EXCEPTION 'priority queue empty';
@@ -33,20 +45,21 @@ BEGIN
             RETURN _d;
         END IF;
 
-        UPDATE dist
-        SET done = TRUE
+        _done[_x][_y] := TRUE;
+        DELETE FROM pq
         WHERE (x,y) = (_x,_y);
 
-        INSERT INTO dist
+        INSERT INTO pq
         SELECT *
-        FROM (VALUES (_x+1, _y, _d + _risks[_x+1][_y], FALSE),
-            (_x-1, _y, _d + _risks[_x-1][_y], FALSE),
-            (_x, _y+1, _d + _risks[_x][_y+1], FALSE),
-            (_x, _y-1, _d + _risks[_x][_y-1], FALSE)) AS new(a,b,d,b)
-        WHERE d IS NOT NULL
+        FROM (VALUES
+            (_x+1, _y, _d + _risks[_x+1][_y]),
+            (_x-1, _y, _d + _risks[_x-1][_y]),
+            (_x, _y+1, _d + _risks[_x][_y+1]),
+            (_x, _y-1, _d + _risks[_x][_y-1])) AS new(x,y,d)
+        WHERE NOT _done[x][y]
         ON CONFLICT (x, y) DO UPDATE
-        SET d = least(dist.d, _d + _risks[dist.x][dist.y])
-        WHERE (dist.x,dist.y) IN ((_x+1, _y),
+        SET d = least(pq.d, _d + _risks[pq.x][pq.y])
+        WHERE (pq.x,pq.y) IN ((_x+1, _y),
             (_x-1, _y),
             (_x, _y+1),
             (_x, _y-1));
