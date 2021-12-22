@@ -89,6 +89,7 @@ int main(void)
 
     found[0] = true;
     abs_beacons[0] = rel_beacons[0];
+    std::vector<point_t> scanners;
 
 loop:
     for (size_t i = 0; i < found.size(); ++i)
@@ -112,6 +113,7 @@ loop:
                         for (size_t n = 11; n < offsets.size(); ++n)
                             if (offsets[n - 11] == offsets[n])
                             {
+                                scanners.push_back(offsets[n]);
                                 for (const auto &p : rot_beacons)
                                     abs_beacons[i].push_back(transrot({ offsets[n].x, offsets[n].y, offsets[n].z, 0 }, p));
                                 found[i] = true;
@@ -120,11 +122,12 @@ loop:
                     }
             }
 
-    std::set<point_t> beacons;
-    for (const auto &bs : abs_beacons)
-        beacons.insert(bs.begin(), bs.end());
+    int max_dist = 0;
+    for (const auto &s : scanners)
+        for (const auto &t : scanners)
+            max_dist = std::max(max_dist, abs(s.x - t.x) + abs(s.y - t.y) + abs(s.z - t.z));
 
-    std::cout << beacons.size();
+    std::cout << max_dist << std::endl;
 
     return 0;
 }
